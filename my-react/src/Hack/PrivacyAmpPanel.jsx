@@ -10,7 +10,7 @@ export default function PrivacyAmpPanel({ finalKey, correctedKey }) {
       background: 'linear-gradient(180deg, #1e293b 0%, #0f172a 100%)'
     }}>
       <h3 className="panel-title" style={{color: '#34d399', marginBottom:'30px'}}>
-        Privacy Amplification (Universal Hashing)
+        Privacy Amplification
       </h3>
 
       <div style={{

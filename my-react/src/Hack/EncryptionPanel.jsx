@@ -107,7 +107,7 @@ export default function EncryptionPanel({ finalKey }) {
         <div className="panel-title" style={{color: '#f43f5e', textAlign:'left', display:'flex', justifyContent:'space-between'}}>
           <span>ALICE (Encrypt)</span>
           <span style={{fontSize:'0.7rem', color:'#fff', background:'#f43f5e', padding:'2px 8px', borderRadius:'4px', fontWeight:'bold'}}>
-             AES-256-GCM
+             AES-256
           </span>
         </div>
         

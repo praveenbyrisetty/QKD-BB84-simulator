@@ -15,7 +15,7 @@ export default function AlicePanel({ qubits, step }) {
 
   return (
     <div className="panel" style={{border: '1px solid #f43f5e', display:'flex', flexDirection:'column', overflow:'hidden', height: '100%'}}>
-      <div className="panel-title" style={{color: '#f43f5e'}}>ALICE (Sender)</div>
+      <div className="panel-title" style={{color: '#f43f5e'}}>ALICE </div>
 
       {totalBits === 0 ? (
         <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', fontStyle:'italic'}}>

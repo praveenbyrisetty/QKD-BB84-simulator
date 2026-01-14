@@ -176,7 +176,7 @@ function App() {
 
         {step >= 4 && !isAborted && (
           <section className="msg-area" style={{marginTop:'30px', textAlign:'left'}}>
-            <h3 style={{color: 'var(--text-main)', textAlign:'center', marginBottom:'20px'}}><span style={{color:'#6366f1'}}>Secure Messaging</span> (Bitwise XOR)</h3>
+            <h3 style={{color: 'var(--text-main)', textAlign:'center', marginBottom:'20px'}}><span style={{color:'#6366f1'}}>Secure Messaging</span></h3>
             <EncryptionPanel finalKey={finalKey} />
           </section>
         )}

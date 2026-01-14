@@ -15,7 +15,7 @@ export default function BobPanel({ qubits, step }) {
 
   return (
     <div className="panel" style={{border: '1px solid #22c55e', display:'flex', flexDirection:'column', overflow:'hidden', height: '100%'}}>
-      <div className="panel-title" style={{color: '#22c55e'}}>BOB (Receiver)</div>
+      <div className="panel-title" style={{color: '#22c55e'}}>BOB</div>
 
       {totalBits === 0 ? (
         <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', fontStyle:'italic'}}>
