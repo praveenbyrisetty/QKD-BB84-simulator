@@ -3,7 +3,7 @@ import React from 'react';
 export default function Header({ isEveOn, setIsEveOn, step }) {
   return (
     <nav className="top-nav">
-      <div className="nav-brand">BB84 Simulator</div>
+      <div className="nav-brand">BB84 Protocol Simulator</div>
       
       <div className="eve-toggle">
         <span style={{
