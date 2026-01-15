@@ -1,5 +1,6 @@
 import React from "react";
-import "./loader.css";
+// ✅ IMPORT THE CSS YOU JUST UPLOADED
+import "./Loader.css"; 
 
 const Loader = () => {
   return (
@@ -10,7 +11,6 @@ const Loader = () => {
             <div key={i} className="loader-dot"></div>
           ))}
         </div>
-        {/* Optional: Add text below the grid if you want */}
         <div style={{color: '#fff', fontFamily: 'monospace', letterSpacing: '2px', textTransform: 'uppercase', fontSize: '1rem'}}>
           Initializing Quantum State...
         </div>

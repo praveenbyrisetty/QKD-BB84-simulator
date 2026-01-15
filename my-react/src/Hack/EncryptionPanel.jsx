@@ -2,185 +2,151 @@ import React, { useState, useEffect } from 'react';
 
 export default function EncryptionPanel({ finalKey }) {
   const [msgInput, setMsgInput] = useState("");
-  const [cipherText, setCipherText] = useState(""); // Hex format
+  const [cipherText, setCipherText] = useState("");
   const [decryptedMsg, setDecryptedMsg] = useState("");
-  const [iv, setIv] = useState(null); // Initialization Vector
-  const [cryptoKey, setCryptoKey] = useState(null);
-
-  // --- CRYPTO HELPERS (Browser Native AES-GCM) ---
+  const [error, setError] = useState("");
   
-  // 1. Convert our Quantum Key (Binary String) into a valid AES-256 Key
-  // We hash the bit string with SHA-256 to stretch it to exactly 32 bytes (256 bits)
-  const generateKey = async (binaryString) => {
-    if (!binaryString) return null;
-    const encoder = new TextEncoder();
-    const data = encoder.encode(binaryString);
-    const hash = await window.crypto.subtle.digest("SHA-256", data);
-    
-    return window.crypto.subtle.importKey(
-      "raw", 
-      hash, 
-      { name: "AES-GCM" }, 
-      false, 
-      ["encrypt", "decrypt"]
-    );
-  };
-
-  const bufferToHex = (buffer) => {
-    return Array.from(new Uint8Array(buffer))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
-  };
-
-  const hexToBuffer = (hex) => {
-    const bytes = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < hex.length; i += 2) {
-      bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
-    }
-    return bytes.buffer;
-  };
-
-  useEffect(() => {
-    // Whenever the finalKey changes, regenerate the AES Key
-    if (finalKey) {
-      generateKey(finalKey).then(k => setCryptoKey(k));
-    }
-    // Reset states
-    setMsgInput(""); setCipherText(""); setDecryptedMsg(""); setIv(null);
-  }, [finalKey]);
-
+  // Calculate stats
+  const keyLength = finalKey ? finalKey.length : 0;
+  const msgBits = msgInput.length * 8; // 1 char = 8 bits
+  const isTooLong = msgBits > keyLength;
 
   const handleEncrypt = async () => {
-    if (!msgInput || !cryptoKey) return;
-    setDecryptedMsg(""); 
+    if (!msgInput || !finalKey) return;
+    setError(""); 
+    setDecryptedMsg("");
+    setCipherText("");
 
-    // Generate random IV (Initialization Vector) - standard for AES
-    const newIv = window.crypto.getRandomValues(new Uint8Array(12));
-    setIv(newIv);
-
-    const encoder = new TextEncoder();
-    const encodedMsg = encoder.encode(msgInput);
-
-    // ENCRYPT
-    const encryptedBuffer = await window.crypto.subtle.encrypt(
-      { name: "AES-GCM", iv: newIv },
-      cryptoKey,
-      encodedMsg
-    );
-
-    setCipherText(bufferToHex(encryptedBuffer));
+    try {
+      const response = await fetch('http://127.0.0.1:5000/encrypt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msgInput, key: finalKey })
+      });
+      
+      const data = await response.json();
+      
+      if (!response.ok) {
+        setError(data.error); // Show the specific security error
+      } else {
+        setCipherText(data.cipher_text);
+      }
+    } catch (e) {
+      alert("Backend connection failed.");
+    }
   };
 
   const handleDecrypt = async () => {
-    if (!cipherText || !cryptoKey || !iv) return;
+    if (!cipherText || !finalKey) return;
 
     try {
-      const encryptedBuffer = hexToBuffer(cipherText);
+      const response = await fetch('http://127.0.0.1:5000/decrypt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cipherText: cipherText, key: finalKey })
+      });
 
-      // DECRYPT
-      const decryptedBuffer = await window.crypto.subtle.decrypt(
-        { name: "AES-GCM", iv: iv },
-        cryptoKey,
-        encryptedBuffer
-      );
-
-      const decoder = new TextDecoder();
-      setDecryptedMsg(decoder.decode(decryptedBuffer));
+      const data = await response.json();
+      setDecryptedMsg(data.decrypted_message);
     } catch (e) {
-      alert("Decryption Failed! Key mismatch or corrupted data.");
+      alert("Decryption Failed");
     }
   };
 
-  const codeBoxStyle = {
-    fontFamily: 'monospace',
-    letterSpacing: '1px',
-    wordBreak: 'break-all', 
-    lineHeight: '1.5',
-    fontSize: '0.85rem'
-  };
-
   return (
-    <div className="split-view" style={{alignItems: 'stretch'}}>
+    <div style={{display:'flex', gap:'20px', alignItems:'stretch'}}>
       
-      {/* --- ALICE SIDE --- */}
-      <div className="panel" style={{border: '1px solid #f43f5e', display:'flex', flexDirection:'column'}}>
-        <div className="panel-title" style={{color: '#f43f5e', textAlign:'left', display:'flex', justifyContent:'space-between'}}>
-          <span>ALICE (Encrypt)</span>
-          <span style={{fontSize:'0.7rem', color:'#fff', background:'#f43f5e', padding:'2px 8px', borderRadius:'4px', fontWeight:'bold'}}>
-             AES-256
+      {/* ALICE */}
+      <div className="panel" style={{flex:1, border: '1px solid #f43f5e', padding:'20px', borderRadius:'12px', background:'#1e293b'}}>
+        <h3 style={{color: '#f43f5e', marginTop:0, display:'flex', justifyContent:'space-between'}}>
+          ALICE 
+          <span style={{fontSize:'0.7rem', color:'#fff', background:'#334155', padding:'2px 8px', borderRadius:'4px'}}>
+            KEY: {keyLength} bits
           </span>
-        </div>
-        
-        <div style={{marginBottom:'10px', fontSize:'0.8rem', color:'#94a3b8'}}>
-           Algorithm: <span style={{color:'#fff'}}>Advanced Encryption Standard</span>
-           <br/>
-           Key Source: <span style={{color:'#f43f5e'}}>Quantum Derived (SHA-256 Hash)</span>
-        </div>
+        </h3>
 
         <textarea 
-          className="input-field" 
           value={msgInput}
           onChange={(e) => setMsgInput(e.target.value)}
-          placeholder="Type a secret message..." 
-          style={{marginBottom:'10px', height:'80px', resize:'none'}}
+          placeholder="Type secret message..." 
+          style={{
+            width:'100%', height:'80px', marginBottom:'10px', 
+            background:'#0f172a', color:'#fff', border:'1px solid #334155', padding:'10px', boxSizing: 'border-box'
+          }}
         />
 
-        {msgInput && cipherText && (
-          <div style={{background:'#0f172a', padding:'15px', borderRadius:'8px', marginTop:'10px'}}>
-             <div style={{fontSize:'0.7rem', color:'#f59e0b', marginBottom:'2px', fontWeight:'bold'}}>ENCRYPTED HEX OUTPUT</div>
-             <div style={{...codeBoxStyle, color:'#f59e0b'}}>{cipherText}</div>
-             <div style={{fontSize:'0.65rem', color:'#64748b', marginTop:'5px'}}>IV: {iv ? bufferToHex(iv) : ''}</div>
+        {/* Real-time Length Check */}
+        <div style={{fontSize:'0.8rem', marginBottom:'15px', display:'flex', justifyContent:'space-between'}}>
+           <span>Message Cost: <strong>{msgBits} bits</strong></span>
+           <span style={{color: isTooLong ? '#f43f5e' : '#22c55e', fontWeight:'bold'}}>
+             {isTooLong ? `Deficit: ${keyLength - msgBits}` : `Remaining: ${keyLength - msgBits}`}
+           </span>
+        </div>
+
+        {error && (
+          <div style={{
+             background:'rgba(244, 63, 94, 0.2)', color:'#f43f5e', padding:'10px', 
+             borderRadius:'6px', fontSize:'0.8rem', marginBottom:'10px', border:'1px solid #f43f5e'
+          }}>
+            🚫 {error}
           </div>
         )}
 
         <button 
-          className="btn btn-primary" 
-          style={{width:'100%', marginTop:'auto', paddingTop:'12px'}} 
-          onClick={handleEncrypt}
-          disabled={!msgInput || !finalKey}
+          onClick={handleEncrypt} 
+          disabled={isTooLong || !msgInput}
+          style={{
+            width:'100%', padding:'10px', 
+            background: isTooLong ? '#334155' : '#f43f5e', 
+            color: isTooLong ? '#94a3b8' : '#fff', 
+            border:'none', borderRadius:'6px', cursor: isTooLong ? 'not-allowed' : 'pointer',
+            fontWeight:'bold'
+          }}
         >
-          🔒 Encrypt with AES
+          {isTooLong ? "NOT ENOUGH KEY" : "Encrypt (One-Time Pad)"}
         </button>
       </div>
 
-      {/* --- BOB SIDE --- */}
-      <div className="panel" style={{border: '1px solid #22c55e', opacity: cipherText ? 1 : 0.5, display:'flex', flexDirection:'column'}}>
-         <div className="panel-title" style={{color: '#22c55e', textAlign:'left'}}>BOB (Decrypt)</div>
-         
-         {!cipherText ? (
-           <div style={{flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', fontStyle:'italic'}}>
-             Waiting for encrypted data...
-           </div>
-         ) : (
-           <>
-             <div style={{background:'#0f172a', padding:'15px', borderRadius:'8px', marginTop:'10px', flex:1}}>
-                <div style={{marginBottom:'10px'}}>
-                   <div style={{fontSize:'0.7rem', color:'#f59e0b', marginBottom:'2px'}}>RECEIVED CIPHERTEXT</div>
-                   <div style={{...codeBoxStyle, color:'#f59e0b'}}>{cipherText}</div>
-                </div>
+      {/* BOB */}
+      <div className="panel" style={{flex:1, border: '1px solid #22c55e', padding:'20px', borderRadius:'12px', background:'#1e293b'}}>
+        <h3 style={{color: '#22c55e', marginTop:0}}>BOB</h3>
+        
+        {cipherText ? (
+          <div style={{background:'#0f172a', padding:'10px', marginBottom:'10px', borderRadius:'6px', wordBreak:'break-all'}}>
+             <div style={{fontSize:'0.7rem', color:'#f59e0b'}}>ENCRYPTED STREAM (HEX)</div>
+             <div style={{fontFamily:'monospace', color:'#f59e0b', fontSize:'1.1rem'}}>{cipherText}</div>
+          </div>
+        ) : (
+          <div style={{
+            height: '60px', border:'1px dashed #334155', borderRadius:'6px', 
+            display:'flex', alignItems:'center', justifyContent:'center', color:'#64748b', fontSize:'0.9rem'
+          }}>
+            Waiting for secure transmission...
+          </div>
+        )}
 
-                <div style={{borderTop:'1px solid #334155', paddingTop:'10px'}}>
-                   <div style={{fontSize:'0.7rem', color:'#10b981', marginBottom:'2px'}}>KEY STATUS</div>
-                   <div style={{fontSize:'0.8rem', color:'#10b981', display:'flex', alignItems:'center', gap:'6px'}}>
-                     <span style={{fontSize:'1.2rem'}}>🔑</span> Quantum Key Synced
-                   </div>
-                </div>
-             </div>
+        <button 
+          onClick={handleDecrypt} 
+          disabled={!cipherText}
+          style={{
+            width:'100%', padding:'10px', background: cipherText ? '#22c55e' : '#334155', 
+            color:'#fff', border:'none', borderRadius:'6px', cursor: cipherText ? 'pointer' : 'default', fontWeight:'bold'
+          }}
+        >
+          Decrypt Message
+        </button>
 
-             <button className="btn" style={{width:'100%', background:'#334155', color:'#fff', margin:'15px 0'}} onClick={handleDecrypt}>
-               🔓 Decrypt Message
-             </button>
-
-             {decryptedMsg && (
-               <div style={{textAlign:'center', background:'rgba(34, 197, 94, 0.1)', padding:'15px', borderRadius:'8px', border:'1px solid #22c55e'}}>
-                 <div style={{fontSize:'0.7rem', color:'#22c55e', textTransform:'uppercase'}}>Decrypted Text</div>
-                 <div style={{fontSize:'1.2rem', fontWeight:'bold', color:'#fff', marginTop:'5px', wordBreak:'break-word'}}>
-                   "{decryptedMsg}"
-                 </div>
-               </div>
-             )}
-           </>
-         )}
+        {decryptedMsg && (
+          <div style={{marginTop:'15px', textAlign:'center', animation: 'fadeIn 0.5s'}}>
+            <div style={{fontSize:'0.8rem', color:'#22c55e', marginBottom:'5px'}}>DECRYPTED PLAINTEXT</div>
+            <div style={{
+              fontSize:'1.2rem', fontWeight:'bold', color:'#fff', 
+              background:'#064e3b', padding:'10px', borderRadius:'6px', border:'1px solid #10b981'
+            }}>
+              {decryptedMsg}
+            </div>
+          </div>
+        )}
       </div>
 
     </div>

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
-import './index.css'; 
-import Loader from './Hack/Loader'; 
 
-// Components
+// ✅ FIX 1: Import CSS from the same folder (./ instead of ../)
+import './index.css'; 
+
+// ✅ FIX 2: Point to components inside the "Hack" folder
+import Loader from './Hack/Loader'; 
 import Header from './Hack/Header';
 import QuantumChannel from './Hack/QuantumChannel';
 import AlicePanel from './Hack/AlicePanel';
@@ -14,99 +16,92 @@ import PrivacyAmpPanel from './Hack/PrivacyAmpPanel';
 import EncryptionPanel from './Hack/EncryptionPanel'; 
 
 function App() {
+  // --- STATE ---
   const [qubits, setQubits] = useState([]); 
   const [isEveOn, setIsEveOn] = useState(false);
   const [step, setStep] = useState(0); 
   
-  // DEFAULT CONFIG
-  const [numBits, setNumBits] = useState(12); 
+  const [numBits, setNumBits] = useState(20); 
   const [isLoading, setIsLoading] = useState(false); 
 
-  const [siftedKey, setSiftedKey] = useState("");
-  const [correctedKey, setCorrectedKey] = useState("");
+  // Backend Data
+  const [backendData, setBackendData] = useState(null);
   const [finalKey, setFinalKey] = useState("");
   const [errorRate, setErrorRate] = useState(0);
   const [isAborted, setIsAborted] = useState(false);
+  const [correctedKey, setCorrectedKey] = useState("");
 
-  const handleTransmit = () => {
+  // --- ACTIONS ---
+
+  const handleTransmit = async () => {
     setIsLoading(true);
-    const delayTime = Math.min(1500 + (numBits * 5), 3000); 
+    setStep(0);
+    setBackendData(null);
+    setQubits([]);
+    setIsAborted(false);
+    setErrorRate(0);
+    setFinalKey("");
+    setCorrectedKey("");
 
-    setTimeout(() => {
-      const newQubits = [];
-      const BASES = ['+', 'x'];
-      const BITS = [0, 1];
-      
-      for (let i = 0; i < numBits; i++) {
-        const aliceBasis = BASES[Math.floor(Math.random() * 2)];
-        const aliceBit = BITS[Math.floor(Math.random() * 2)];
-        let bobBasis = BASES[Math.floor(Math.random() * 2)];
-        let bobBit = aliceBit;
+    try {
+      const response = await fetch('http://127.0.0.1:5000/bb84', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ n: numBits, eve: isEveOn }),
+      });
 
-        if (isEveOn) {
-          if (Math.random() < 0.5) { 
-             if (Math.random() < 0.5) bobBit = 1 - bobBit; 
-          }
-        }
-        if (aliceBasis !== bobBasis) {
-          bobBit = Math.floor(Math.random() * 2);
-        }
-        newQubits.push({ id: i, aliceBasis, aliceBit, bobBasis, bobBit });
-      }
+      const data = await response.json();
+      setBackendData(data);
 
-      setQubits(newQubits);
-      setStep(1);
+      const uiQubits = data.alice_bits.map((bit, i) => ({
+        id: i,
+        aliceBit: bit,
+        aliceBasis: data.alice_bases[i],
+        bobBasis: data.bob_bases[i],
+        bobBit: data.bob_results[i], 
+      }));
+
+      setTimeout(() => {
+        setQubits(uiQubits);
+        setStep(1);
+        setIsLoading(false);
+      }, 1000);
+
+    } catch (error) {
+      console.error("Backend Error:", error);
+      alert("⚠️ Error: Is your Python Backend running on port 5000?");
       setIsLoading(false);
-    }, delayTime); 
+    }
   };
 
   const handleSift = () => {
-    const match = qubits.filter(q => q.aliceBasis === q.bobBasis);
-    let errors = 0;
-    match.forEach(q => { if (q.aliceBit !== q.bobBit) errors++; });
-    const rate = match.length > 0 ? (errors / match.length) * 100 : 0;
-    setErrorRate(rate);
-    const key = match.map(q => q.aliceBit).join('');
-    setSiftedKey(key);
+    if (!backendData) return;
+    setErrorRate(backendData.qber * 100);
     setStep(2);
   };
 
   const handleCascade = () => {
-    if (errorRate > 15) {
+    if (!backendData) return;
+    if (backendData.aborted) {
       setIsAborted(true);
-      setStep(3);
-      return; 
     }
-    const match = qubits.filter(q => q.aliceBasis === q.bobBasis);
-    const corrected = match.map(q => q.aliceBit).join('');
-    setCorrectedKey(corrected);
+    setCorrectedKey(backendData.alice_key ? backendData.alice_key.join('') : "");
     setStep(3);
   };
 
   const handlePrivacyAmp = () => {
-    if (isAborted) return;
-    const originalLen = correctedKey.length;
-    const targetLen = Math.max(1, Math.floor(originalLen * 0.6));
-    let mixedKey = "";
-    const processLen = Math.min(targetLen, 2000); 
-    
-    for (let i = 0; i < processLen; i++) {
-      let mixBlock = 0;
-      for (let j = 0; j < originalLen; j+=Math.floor(originalLen/50) + 1) {
-        if (correctedKey[j] === '1') mixBlock += (i + j); 
-      }
-      mixedKey += (mixBlock % 2).toString();
-    }
-    setFinalKey(mixedKey);
+    if (isAborted || !backendData) return;
+    const keyStr = backendData.final_key.join('');
+    setFinalKey(keyStr);
     setStep(4);
   };
 
   const handleReset = () => {
     setQubits([]); setStep(0); setIsAborted(false);
-    setSiftedKey(""); setCorrectedKey(""); setFinalKey(""); 
-    setErrorRate(0); 
+    setFinalKey(""); setErrorRate(0); setBackendData(null);
   };
 
+  // --- RENDER ---
   return (
     <div>
       {isLoading && <Loader />}
@@ -114,6 +109,7 @@ function App() {
 
       <main className="container">
         
+        {/* STEP 0: CONFIG */}
         {step === 0 && !isLoading && (
           <div className="config-panel">
             <div style={{display:'flex', flexDirection:'column', alignItems:'center', width:'100%', maxWidth:'500px'}}>
@@ -122,16 +118,16 @@ function App() {
                 <span style={{color:'#6366f1', fontWeight:'bold', fontFamily:'monospace', fontSize:'1.1rem'}}>{numBits} Qubits</span>
               </div>
               <div className="range-wrapper">
-                <input type="range" min="1" max="1000" value={numBits} onChange={(e) => setNumBits(parseInt(e.target.value))} className="custom-range"/>
-                <div style={{display:'flex', justifyContent:'space-between', width:'100%', fontSize:'0.75rem', color:'#64748b', marginTop:'5px'}}><span>1</span><span>500</span><span>1000</span></div>
+                <input type="range" min="10" max="500" value={numBits} onChange={(e) => setNumBits(parseInt(e.target.value))} className="custom-range"/>
               </div>
             </div>
           </div>
         )}
 
-        <section><QuantumChannel isTransmitting={step >= 1 && !isAborted} qubits={qubits} /></section>
+        <section>
+            <QuantumChannel isTransmitting={step >= 1 && !isAborted} qubits={qubits} />
+        </section>
         
-        {/* UPDATED: Passing 'step' to AlicePanel now */}
         <section className="split-view">
            <AlicePanel qubits={qubits} step={step} />
            <BobPanel qubits={qubits} step={step} />
@@ -143,27 +139,16 @@ function App() {
                <div className="abort-container">
                  <div className="abort-icon">🚨</div>
                  <h2 className="abort-title">Protocol Aborted</h2>
-                 <div className="abort-msg">Eavesdropper detected! Error Rate ({errorRate.toFixed(1)}%) exceeds safety threshold.</div>
-                 <div className="abort-badge">Connection Terminated. No Key Generated.</div>
-                 <div className="graph-container-evidence" style={{marginTop:'30px', width:'100%', maxWidth:'900px'}}>
-                   <h3 style={{fontSize:'0.9rem', color:'#94a3b8', marginBottom:'15px', textAlign:'center'}}>EVIDENCE: SIFTED KEY MISMATCH</h3>
-                   <div style={{height: '350px'}}><GraphPage qubits={qubits} /></div>
-                 </div>
+                 <div className="abort-msg">Eavesdropper detected! Error Rate ({errorRate.toFixed(1)}%) too high.</div>
                </div>
              ) : (
-               <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'30px', alignItems:'stretch', height:'420px'}}>
-                 <div style={{height:'100%', minHeight:0}}><CascadePanel siftedQubits={qubits} /></div>
-                 <div style={{background:'rgba(15, 23, 42, 0.5)', borderRadius:'12px', border:'1px solid #334155', overflow: 'hidden', display: 'flex', flexDirection: 'column', height: '100%'}}>
-                    <div style={{background: '#0f172a', padding: '20px', borderBottom: '1px solid #334155', display: 'flex', flexDirection: 'column', gap: '5px'}}>
-                      <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%'}}>
-                        <div style={{color:'#94a3b8', fontSize:'0.9rem', fontWeight:'bold', letterSpacing:'1px'}}>BIT ERROR RATE (QBER)</div>
-                        <div style={{fontSize:'2rem', fontWeight:'bold', color: errorRate > 0 ? '#ef4444' : '#10b981', lineHeight: '1'}}>{errorRate.toFixed(1)}%</div>
-                      </div>
-                      <div style={{alignSelf: 'flex-end', fontSize:'0.8rem', fontWeight:'bold', color: errorRate > 0 ? '#ef4444' : '#10b981', background: errorRate > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', padding: '4px 10px', borderRadius: '4px', marginTop: '5px'}}>
-                        STATUS: {errorRate < 15 ? 'SECURE (<15%)' : 'UNSECURE (>15%)'}
-                      </div>
-                    </div>
-                    <div style={{padding:'20px', flex:1, minHeight:0}}><GraphPage qubits={qubits} /></div>
+               <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'30px', height:'420px'}}>
+                 <div style={{height:'100%'}}>
+                    <CascadePanel siftedQubits={qubits} />
+                 </div>
+                 <div style={{background:'rgba(15, 23, 42, 0.5)', borderRadius:'12px', border:'1px solid #334155', padding:'20px'}}>
+                    <div style={{textAlign:'center', marginBottom:'10px'}}>QBER: {errorRate.toFixed(1)}%</div>
+                    <GraphPage qubits={qubits} />
                  </div>
                </div>
              )}
@@ -171,18 +156,20 @@ function App() {
         )}
 
         {step >= 3 && !isAborted && (
-          <section><PrivacyAmpPanel finalKey={step >= 4 ? finalKey : ""} correctedKey={correctedKey} /></section>
+          <section>
+             <PrivacyAmpPanel finalKey={step >= 4 ? backendData.final_key : ""} correctedKey={correctedKey} />
+          </section>
         )}
 
         {step >= 4 && !isAborted && (
-          <section className="msg-area" style={{marginTop:'30px', textAlign:'left'}}>
-            <h3 style={{color: 'var(--text-main)', textAlign:'center', marginBottom:'20px'}}><span style={{color:'#6366f1'}}>Secure Messaging</span></h3>
-            <EncryptionPanel finalKey={finalKey} />
+          <section className="msg-area" style={{marginTop:'30px'}}>
+            <h3 style={{textAlign:'center', color:'#6366f1', marginBottom:'20px'}}>Secure Messaging</h3>
+            <EncryptionPanel finalKey={backendData.final_key} />
           </section>
         )}
       </main>
 
-      <Controls step={step} actions={{ handleTransmit, handleSift, handleCascade, handlePrivacyAmp, handleReset }} isAborted={isAborted} />
+      <Controls step={step} actions={{ handleTransmit, handleSift, handleCascade, handlePrivacyAmp, handleReset }} />
     </div>
   );
 }
